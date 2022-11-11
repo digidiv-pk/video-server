@@ -3,13 +3,25 @@
     <img src="logo.png" alt="rtsp-simple-server">
 </p>
 
-_rtsp-simple-server_ is a ready-to-use and zero-dependency server and proxy that allows users to publish, read and proxy live video and audio streams through various protocols:
+_rtsp-simple-server_ is a ready-to-use and zero-dependency server and proxy that allows users to publish, read and proxy live video and audio streams.
 
-|protocol|description|variants|publish|read|proxy|
-|--------|-----------|--------|-------|----|-----|
-|RTSP|fastest way to publish and read streams|RTSP, RTSPS|:heavy_check_mark:|:heavy_check_mark:|:heavy_check_mark:|
-|RTMP|allows to interact with legacy software|RTMP, RTMPS|:heavy_check_mark:|:heavy_check_mark:|:heavy_check_mark:|
-|HLS|allows to embed streams into a web page|Low-Latency HLS, standard HLS|:x:|:heavy_check_mark:|:heavy_check_mark:|
+Live streams can be sent to the server with:
+
+|name|description|variants|
+|RTSP clients||RTSP, RTSPS|
+|RTSP servers/cameras||RTMP, RTMPS|
+|RTMP clients|||
+|RTMP servers/cameras|||
+|HLS servers/cameras||Low-Latency HLS, legacy HLS|
+|Raspberry Pi Cameras|||
+
+And can be pulled from the server with:
+
+|name|description|variants|
+|RTSP||RTSP, RTSPS|
+|RTMP||RTMP, RTMPS|
+|HLS||Low-Latency HLS, legacy HLS|
+|WebRTC|||
 
 Features:
 
