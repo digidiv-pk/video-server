@@ -9,7 +9,7 @@ import (
 
 	"github.com/aler9/gortsplib"
 	"github.com/aler9/gortsplib/pkg/ringbuffer"
-	"github.com/aler9/gortsplib/pkg/rtph264"
+	"github.com/aler9/gortsplib/pkg/rtpcodecs/rtph264"
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v3"
 
