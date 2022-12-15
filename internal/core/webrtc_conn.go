@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 
 	"github.com/aler9/gortsplib"
@@ -40,16 +41,7 @@ type webRTCConn struct {
 	ringBuffer *ringbuffer.RingBuffer
 }
 
-func newWebRTCConn(
-	parentCtx context.Context,
-	readBufferCount int,
-	pathName string,
-	wsconn *websocket.Conn,
-	stunServers []string,
-	wg *sync.WaitGroup,
-	pathManager webRTCConnPathManager,
-	parent webRTCConnParent,
-) *webRTCConn {
+func newWebRTCConn(parentCtx context.Context, readBufferCount int, pathName string, wsconn *websocket.Conn, stunServers []string, wg *sync.WaitGroup, pathManager webRTCConnPathManager, parent webRTCConnParent) *webRTCConn {
 	ctx, ctxCancel := context.WithCancel(parentCtx)
 
 	c := &webRTCConn{
@@ -116,11 +108,7 @@ func (c *webRTCConn) runInner(ctx context.Context) error {
 	res := c.pathManager.readerAdd(pathReaderAddReq{
 		author:   c,
 		pathName: c.pathName,
-		authenticate: func(
-			pathIPs []fmt.Stringer,
-			pathUser conf.Credential,
-			pathPass conf.Credential,
-		) error {
+		authenticate: func(pathIPs []fmt.Stringer, pathUser conf.Credential, pathPass conf.Credential) error {
 			return nil
 		},
 	})
@@ -135,9 +123,12 @@ func (c *webRTCConn) runInner(ctx context.Context) error {
 	}()
 
 	var videoTrack *gortsplib.TrackH264
+	var audioTrack *gortsplib.TrackOpus
 	videoTrackID := -1
-
+	audioTrackID := -1
 	for i, track := range res.stream.tracks() {
+		log.Print(track)
+		fmt.Printf("track = %T\n", track)
 		if tt, ok := track.(*gortsplib.TrackH264); ok {
 			if videoTrack != nil {
 				return fmt.Errorf("can't read track %d with WebRTC: too many tracks", i+1)
@@ -145,6 +136,13 @@ func (c *webRTCConn) runInner(ctx context.Context) error {
 
 			videoTrack = tt
 			videoTrackID = i
+		} else if tt, ok := track.(*gortsplib.TrackOpus); ok {
+			if audioTrack != nil {
+				return fmt.Errorf("can't read track %d with WebRTC: too many tracks", i+1)
+			}
+
+			audioTrack = tt
+			audioTrackID = i
 		}
 	}
 
@@ -197,14 +195,18 @@ func (c *webRTCConn) runInner(ctx context.Context) error {
 		}
 	})
 
-	track, err := webrtc.NewTrackLocalStaticRTP(
-		webrtc.RTPCodecCapability{
-			MimeType:  webrtc.MimeTypeH264,
-			ClockRate: 90000,
-		},
-		"video",
-		"rtspss",
-	)
+	trackVideo, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{
+		MimeType:  webrtc.MimeTypeH264,
+		ClockRate: 90000,
+	}, "video", "rtspss")
+	if err != nil {
+		return err
+	}
+
+	trackAudio, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{
+		MimeType:  webrtc.MimeTypeOpus,
+		ClockRate: 90000,
+	}, "audio", "rtspsa")
 	if err != nil {
 		return err
 	}
@@ -214,13 +216,20 @@ func (c *webRTCConn) runInner(ctx context.Context) error {
 
 		if s == webrtc.PeerConnectionStateConnected {
 			close(pcConnected)
-			go c.runWriter(path, videoTrack, videoTrackID, track, pc)
+			go c.runWriter(path, videoTrack, videoTrackID, audioTrack, audioTrackID, trackVideo, trackAudio, pc)
 		}
 	})
 
-	_, err = pc.AddTrack(track)
+	_, err = pc.AddTrack(trackVideo)
 	if err != nil {
 		return err
+	}
+
+	if audioTrackID != -1 {
+		_, err = pc.AddTrack(trackAudio)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = pc.SetRemoteDescription(*offer)
@@ -263,13 +272,7 @@ func (c *webRTCConn) runInner(ctx context.Context) error {
 	}
 }
 
-func (c *webRTCConn) runWriter(
-	path *path,
-	videoTrack *gortsplib.TrackH264,
-	videoTrackID int,
-	webrtcVideoTrack *webrtc.TrackLocalStaticRTP,
-	pc *webrtc.PeerConnection,
-) {
+func (c *webRTCConn) runWriter(path *path, videoTrack *gortsplib.TrackH264, videoTrackID int, audioTrack *gortsplib.TrackOpus, audioTrackID int, webrtcVideoTrack *webrtc.TrackLocalStaticRTP, webrtcAudioTrack *webrtc.TrackLocalStaticRTP, pc *webrtc.PeerConnection) {
 	c.ringBuffer, _ = ringbuffer.New(uint64(c.readBufferCount))
 	go func() {
 		<-c.ctx.Done()
@@ -280,10 +283,9 @@ func (c *webRTCConn) runWriter(
 		author: c,
 	})
 
-	tracks := gortsplib.Tracks{videoTrack}
+	tracks := gortsplib.Tracks{videoTrack, audioTrack}
 
-	c.log(logger.Info, "is reading from path '%s', %s",
-		path.Name(), sourceTrackInfo(tracks))
+	c.log(logger.Info, "is reading from path '%s', %s", path.Name(), sourceTrackInfo(tracks))
 
 	encoder := &rtph264.Encoder{
 		PayloadType:    96,
@@ -312,6 +314,15 @@ func (c *webRTCConn) runWriter(
 			for _, pkt := range packets {
 				webrtcVideoTrack.WriteRTP(pkt)
 			}
+		} else if audioTrack != nil && data.getTrackID() == audioTrackID {
+			tdata := data.(*dataGeneric)
+			if tdata.rtpPackets == nil {
+				continue
+			}
+			for _, pkt := range tdata.rtpPackets {
+				webrtcAudioTrack.WriteRTP(pkt)
+			}
+
 		}
 	}
 }

@@ -56,18 +56,7 @@ type webRTCServer struct {
 	chConnClose chan *webRTCConn
 }
 
-func newWebRTCServer(
-	parentCtx context.Context,
-	address string,
-	serverKey string,
-	serverCert string,
-	allowOrigin string,
-	trustedProxies conf.IPsOrCIDRs,
-	stunServers []string,
-	readBufferCount int,
-	pathManager *pathManager,
-	parent webRTCServerParent,
-) (*webRTCServer, error) {
+func newWebRTCServer(parentCtx context.Context, address string, serverKey string, serverCert string, allowOrigin string, trustedProxies conf.IPsOrCIDRs, stunServers []string, readBufferCount int, pathManager *pathManager, parent webRTCServerParent) (*webRTCServer, error) {
 	ln, err := net.Listen("tcp", address)
 	if err != nil {
 		return nil, err
@@ -138,26 +127,13 @@ func (s *webRTCServer) run() {
 		ErrorLog:  log.New(&nilWriter{}, "", 0),
 	}
 
-	if s.tlsConfig != nil {
-		go hs.ServeTLS(s.ln, "", "")
-	} else {
-		go hs.Serve(s.ln)
-	}
+	go hs.Serve(s.ln)
 
 outer:
 	for {
 		select {
 		case req := <-s.connNew:
-			c := newWebRTCConn(
-				s.ctx,
-				s.readBufferCount,
-				req.pathName,
-				req.wsconn,
-				s.stunServers,
-				&s.wg,
-				s.pathManager,
-				s,
-			)
+			c := newWebRTCConn(s.ctx, s.readBufferCount, req.pathName, req.wsconn, s.stunServers, &s.wg, s.pathManager, s)
 			s.conns[c] = struct{}{}
 
 		case conn := <-s.chConnClose:

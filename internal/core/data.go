@@ -51,6 +51,27 @@ func (d *dataH264) getNTP() time.Time {
 	return d.ntp
 }
 
+
+type dataVP8 struct {
+	trackID    int
+	rtpPackets []*rtp.Packet
+	ntp        time.Time
+	pts        time.Duration
+	nalus      []byte
+}
+
+func (d *dataVP8) getTrackID() int {
+	return d.trackID
+}
+
+func (d *dataVP8) getRTPPackets() []*rtp.Packet {
+	return d.rtpPackets
+}
+
+func (d *dataVP8) getNTP() time.Time {
+	return d.ntp
+}
+
 type dataMPEG4Audio struct {
 	trackID    int
 	rtpPackets []*rtp.Packet

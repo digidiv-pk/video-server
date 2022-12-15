@@ -29,6 +29,7 @@ class Receiver {
 		this.terminated = false;
 		this.ws = null;
 		this.pc = null;
+        this.tracks = []
 		this.restartTimeout = null;
 		this.start();
 	}
@@ -97,7 +98,9 @@ class Receiver {
 
         this.pc.ontrack = (evt) => {
             console.log("[receiver] new track " + evt.track.kind);
-            document.getElementById("video").srcObject = new MediaStream([evt.track]);
+            this.tracks.push(evt.track)
+            document.getElementById("video").srcObject = new MediaStream(this.tracks);
+
         };
 
         // utilizza sendrecv per firefox
